@@ -1,4 +1,5 @@
 NAME := src
+PYTHON ?= python3
 FLAKE8 := uv run -m flake8
 FLAKE8_FLAGS := --count --show-source --filename [./*.py]
 MYPY := uv run mypy
@@ -17,7 +18,7 @@ install:
 	$(UV_VENV)
 
 run:
-	uv run python -m $(NAME) $(FLAGS)
+	uv run $(PYTHON) -m $(NAME) $(FLAGS)
 
 lint:
 	$(FLAKE8) $(FLAKE8_FLAGS) .
