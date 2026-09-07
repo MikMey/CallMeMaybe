@@ -1,0 +1,16 @@
+[project]
+name = "callmemaybe"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "argparse>=1.4.0",
+    "flake8>=7.3.0",
+    "llm-sdk>=1.0.1",
+    "mypy>=2.3.1",
+    "numpy>=2.5.3",
+    "pydantic>=2.13.5",
+    "pylance>=11.0.0",
+    "qwen>=0.1.1",
+]
