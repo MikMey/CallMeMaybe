@@ -6,9 +6,9 @@ MYPY := uv run mypy
 MYPY_FLAGS := --warn-return-any \
 			  --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs \
 			  --check-untyped-defs
-UV_VENV := python3 -m uv sync
+UV_VENV := uv sync
 DEF ?= data/input/functions_definition.json
-IN ?= data/input/function_calling_test.json
+IN ?= data/input/function_calling_tests.json
 OUT ?= data/output/function_calling_results.json
 FLAGS := --functions_definition $(DEF) --input $(IN) --output $(OUT)
 
