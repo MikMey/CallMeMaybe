@@ -1,11 +1,14 @@
 from typing import Any, Callable, Optional
 import sys
+import os
 
 import numpy as np
 import json
 import random
 import functools
 import time
+import re
+from statemachine import StateChart, State
 
 from llm_sdk import Small_LLM_Model
 from .models import FuncDef
@@ -20,8 +23,16 @@ def Timer(func: Callable) -> Callable:
 		return result
 	return wrapper
 
+
 MSG = "Your job is function calling. You will be given a prompt and must choose from one of the functions and declare their arguments. You need to return in the following Format: [function_name],{[Argument]:[Value]}" 
 
+post_name_pattern = re.compile(
+	r"^],{"
+)
+
+arg_pattern = re.compile(
+	r"(?P<arg>\w+)'?:\s?'?(?P<val>[^},]+)"
+	)
 
 class	FeedbackLoop():
 	_model: Small_LLM_Model = None
@@ -44,7 +55,84 @@ class	FeedbackLoop():
 			FeedbackLoop._funcdefs = funcdefs
 
 
+	class _CheckerMachine(StateChart):
+		name = State(initial=True)
+		spacer = State()
+		args = State(final=True)
+
+		advance = (
+			name.to(spacer)
+			| spacer.to(args)
+		)
+
+		def __init__(self, prompt: str, funcdefs: list[FuncDef], get_token: Callable):
+			self.prompt = prompt
+			self.funcdefs = funcdefs
+			self.get_token = get_token
+
+
+		def before_cycle(self):
+			self.res: str = ""
+			self.top_k = 10
+
+		def on_enter_name(self):
+			while True:
+				options = self.get_token(self.prompt + self.res, self.top_k)
+				for i, option in enumerate(options[0]):
+					to_check: str = self.res + option
+
+					self.func_matches: list[FuncDef] = [
+						func for func in self.funcdefs 
+						if func.name.startswith(to_check) 
+						or to_check.startswith(func.name)
+						]
+
+				if not self.func_matches and option == options[0][-1]:
+					top_k += 5
+					continue
+				elif not self.func_matches:
+					continue
+
+		def on_exit_name():
+			pass
+
+		def on_enter_spacer():
+			pass
+
+		def on_enter_args():
+			pass
+
+		def on_exit_args():
+			pass
+
+
 	def get_answer(self):
+
+		
+		
+		while '}' not in res:
+			
+				if len(func_matches) == 1 and to_check.startswith(func_matches[0].name):
+					#if we have full function name
+					new = to_check[len(func_matches[0].name):]
+					# print(new)
+					matched: list[tuple[str]] = arg_pattern.findall(new)
+					# if matched:
+					# 	print(matched)
+				
+				res = to_check
+				func_matches
+				# for i in func_matches:
+					# print(i.name)
+				top_k = 10
+				break
+		self.func_name = func_matches[0].name
+		self.args: dict[str | float] = {}
+		for pair in matched:
+			self.args[pair[0]] = pair[1].strip("'")
+		
+
+	def _prep_prompt(self) -> str:
 
 		text: str = MSG
 		for func in self._funcdefs:
@@ -62,11 +150,9 @@ class	FeedbackLoop():
 			)
 		text += (
 			f"\n\nYour Prompt is: {self.prompt}\n"
+			f"Answer: ["
 		)
-		for _ in range(25):
-			text += self._get_token(text)[0][0]
-		print (text)
-		
+		return text
 
 
 	def _choose_token(self, text: str) -> str:
