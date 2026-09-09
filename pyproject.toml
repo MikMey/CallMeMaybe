@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "accelerate>=1.14.0",
     "argparse>=1.4.0",
     "flake8>=7.3.0",
     "llm-sdk",
@@ -12,6 +13,8 @@ dependencies = [
     "numpy>=2.5.3",
     "pydantic>=2.13.5",
     "pylance>=11.0.0",
+    "tokenizer>=3.6.4",
+    "torch>=2.14.0",
 ]
 
 [tool.uv.workspace]
