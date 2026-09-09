@@ -2,7 +2,7 @@ import sys
 from typing import Any, Optional
 import json
 
-from . import parse_args, FuncDef
+from . import parse_args, FuncDef, FeedbackLoop
 
 if __name__ == "__main__":
 	args = parse_args()
@@ -10,16 +10,21 @@ if __name__ == "__main__":
 	with open(args.functions_definition, "r") as file:
 		func_def = json.load(file)
 	with open(args.input, "r") as file:
-		prompts = json.load(file)
+		raw_prompts: dict[dict[str, str]] = json.load(file)
 
 	funcs: list[FuncDef] = []
 	for func in func_def:
-		curr = FuncDef.model_validate(func)
-		funcs.append(curr)
-		print(curr)
+		funcs.append(FuncDef.model_validate(func))
+
+	prompts = []
+	for prompt in raw_prompts:
+		prompts.append(prompt["prompt"])
+
+	loops: list[FeedbackLoop] = []
+
+	FeedbackLoop(None, funcdefs=funcs)
 	for prompt in prompts:
-		print(prompt)
-
-	
-
-		
+		curr_loop  = FeedbackLoop(prompt)
+		loops.append(curr_loop)
+		curr_loop.get_answer()
+		print("\n")
