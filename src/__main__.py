@@ -27,4 +27,4 @@ if __name__ == "__main__":
 		curr_loop  = FeedbackLoop(prompt)
 		loops.append(curr_loop)
 		curr_loop.get_answer()
-		print("\n")
+		print(f"{curr_loop.prompt}\n{curr_loop.func_name}\n{curr_loop.args}\n")
