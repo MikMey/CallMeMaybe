@@ -70,63 +70,87 @@ class	FeedbackLoop():
 			self.funcdefs = funcdefs
 			self.get_token = get_token
 
+		@functools.singledispatch
+		def loop(self, var: str | Any):
+			"""
+			Match given argument to returned token
+			"""
+			res = ""
+			top_k = 10
+			while True:
+				matches: bool = False
+				options = self.get_token(self.prompt + res, top_k)
+
+				for option in options[0]:
+					to_check: str = self.res + option
+					if var.startwith(to_check) or to_check.startswith(var):
+						matches: bool = True
+
+				if not matches:
+					top_k += 5
+					continue
+				if to_check.startswith(var):
+					self.prompt += res
+					return
+				top_k = 10
+				res = to_check
+
+		@loop.register(Callable)
+		def _1(self, func: Callable):
+			"""
+
+			"""
+			top_k = 10
+			res = ""
+			while True:
+				options = self.get_token(self.prompt + res, top_k)
+				for option in options[0]:
+					to_check: str = res + option
+					matches: list = func(to_check)
+
+				if not matches:
+					top_k += 5
+					continue
+				top_k = 10
+				res = to_check
+				if len(matches) == 2 and matches[-1] == True:
+					self.promp += res
+					return
+
+		def match_name(self, to_check: str) -> list[Any | bool]:
+			self.func_matches: list[FuncDef] = [
+				func for func in self.funcdefs 
+				if func.name.startswith(to_check) 
+				or to_check.startswith(func.name)
+				]
+
+		def match_args(self, to_check: str) -> list[Any | bool]:
+			new = to_check[len(self.func_name):]
+			matched: list[tuple[str]] = arg_pattern.findall(new)
 
 		def before_cycle(self):
 			self.res: str = ""
 			self.top_k = 10
 
 		def on_enter_name(self):
-			while True:
-				options = self.get_token(self.prompt + self.res, self.top_k)
-				for i, option in enumerate(options[0]):
-					to_check: str = self.res + option
+			self.loop(self.match_name)
+			
 
-					self.func_matches: list[FuncDef] = [
-						func for func in self.funcdefs 
-						if func.name.startswith(to_check) 
-						or to_check.startswith(func.name)
-						]
+		def on_exit_name(self):
+			self.func_name = self.func_matches[0]
 
-				if not self.func_matches and option == options[0][-1]:
-					top_k += 5
-					continue
-				elif not self.func_matches:
-					continue
+		def on_enter_spacer(self):
+			self.loop("],{")
+									
 
-		def on_exit_name():
+		def on_enter_args(self):
+			self.loop(self.match_args)
+
+		def on_exit_args(self):
 			pass
-
-		def on_enter_spacer():
-			pass
-
-		def on_enter_args():
-			pass
-
-		def on_exit_args():
-			pass
-
 
 	def get_answer(self):
 
-		
-		
-		while '}' not in res:
-			
-				if len(func_matches) == 1 and to_check.startswith(func_matches[0].name):
-					#if we have full function name
-					new = to_check[len(func_matches[0].name):]
-					# print(new)
-					matched: list[tuple[str]] = arg_pattern.findall(new)
-					# if matched:
-					# 	print(matched)
-				
-				res = to_check
-				func_matches
-				# for i in func_matches:
-					# print(i.name)
-				top_k = 10
-				break
-		self.func_name = func_matches[0].name
 		self.args: dict[str | float] = {}
 		for pair in matched:
 			self.args[pair[0]] = pair[1].strip("'")
