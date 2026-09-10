@@ -19,7 +19,7 @@ def Timer(func: Callable) -> Callable:
 		start = time.time()
 		result = func(*args, **kwargs)
 		end = time.time()
-		print(f"Time: {end-start}")
+		# print(f"Time: {end-start}")
 		return result
 	return wrapper
 
@@ -43,6 +43,8 @@ class	FeedbackLoop():
 
 	def __init__(self, prompt: str, funcdefs: Optional[list[FuncDef]] = None, model: Optional[str] = "Qwen/Qwen3-0.6B"):
 		self.prompt = prompt
+		self.func_name: dict[str, str] = None
+		self.args: dict[dict[str, str | float]] = None
 		if FeedbackLoop._model is None:
 
 			FeedbackLoop._model = Small_LLM_Model(model_name=model)
@@ -55,105 +57,145 @@ class	FeedbackLoop():
 			FeedbackLoop._funcdefs = funcdefs
 
 
-	class _CheckerMachine(StateChart):
-		name = State(initial=True)
-		spacer = State()
-		args = State(final=True)
-
-		advance = (
-			name.to(spacer)
-			| spacer.to(args)
-		)
+	class _CheckerMachine():
 
 		def __init__(self, prompt: str, funcdefs: list[FuncDef], get_token: Callable):
 			self.prompt = prompt
 			self.funcdefs = funcdefs
 			self.get_token = get_token
+			self.func: FuncDef = None
+			self.params: list[tuple[str]] = None
 
-		@functools.singledispatch
-		def loop(self, var: str | Any):
+
+		
+		def loop_class(self, func: Callable):
+			# print("class loop")
+			top_k = 10
+			res = ""
+			while True:
+				# print(f"res: {res}")
+				options = self.get_token(self.prompt + res, top_k)
+				# print(f"prompt: {self.prompt}\noptions: {options[0]}")
+				for option in options[0]:
+					to_check: str = res + option
+					matches: list = func(to_check)
+					if len(matches) > 1:
+						res = to_check
+						break
+
+				if len(matches) == 1:
+					top_k += 5
+					continue
+				if len(matches) == 2 and matches[-1] == True:
+					# print("exit loop class")
+					self.prompt += res
+					return
+				top_k = 10
+				
+
+		def loop_str(self, var: str | Any):
 			"""
 			Match given argument to returned token
 			"""
+			# print("str loop")
 			res = ""
 			top_k = 10
 			while True:
 				matches: bool = False
 				options = self.get_token(self.prompt + res, top_k)
-
+				# print(f"prompt: {self.prompt}\noptions: {options[0]}")
 				for option in options[0]:
-					to_check: str = self.res + option
-					if var.startwith(to_check) or to_check.startswith(var):
+					to_check: str = res + option
+					if var.startswith(to_check) or to_check.startswith(var):
 						matches: bool = True
+						res = to_check
+						break
 
 				if not matches:
 					top_k += 5
 					continue
 				if to_check.startswith(var):
 					self.prompt += res
+					# print(f"prompt: {self.prompt}")
+					# print(f"res: {res}")
 					return
 				top_k = 10
-				res = to_check
+				
 
-		@loop.register(Callable)
-		def _1(self, func: Callable):
-			"""
-
-			"""
-			top_k = 10
-			res = ""
-			while True:
-				options = self.get_token(self.prompt + res, top_k)
-				for option in options[0]:
-					to_check: str = res + option
-					matches: list = func(to_check)
-
-				if not matches:
-					top_k += 5
-					continue
-				top_k = 10
-				res = to_check
-				if len(matches) == 2 and matches[-1] == True:
-					self.promp += res
-					return
 
 		def match_name(self, to_check: str) -> list[Any | bool]:
-			self.func_matches: list[FuncDef] = [
+			func_matches: list[FuncDef] = [
 				func for func in self.funcdefs 
 				if func.name.startswith(to_check) 
 				or to_check.startswith(func.name)
 				]
+			# if func_matches:
+			# 	for func in func_matches:
+					# print (f"name: {func.name}")
+			func_matches.append(False)
+			if len(func_matches) == 2 and to_check.startswith(func_matches[0].name):
+				self.func = func_matches[0]
+				func_matches[-1] = True
+			return func_matches
+
 
 		def match_args(self, to_check: str) -> list[Any | bool]:
-			new = to_check[len(self.func_name):]
-			matched: list[tuple[str]] = arg_pattern.findall(new)
-
-		def before_cycle(self):
-			self.res: str = ""
-			self.top_k = 10
+			matches: list[list | bool] = [[]]
+			to_check: list[str] = to_check.split(",")
+			for val in to_check:
+				val = val.strip()
+				val = re.sub("'", "", val)
+			for arg, desc in self.func.params.items():
+				if (
+					any(val.startswith(arg) for val in to_check) or
+					any(arg.startswith(val) for val in to_check)
+				):
+					matches[0].append(arg)
+			matches.append(False)
+			matched: list[tuple[str]] = []
+			to_check: str = ",".join([thing for thing in to_check])
+			matched = (arg_pattern.findall(to_check))
+			# print(matched)
+			if matched and len(matched) == len(self.func.params) and to_check.strip().endswith('}'):
+				# print(f"len matched: {len(matched)};len params: {len(self.func.params)}")
+				matches[-1] = True
+				self.params = matched
+			return matches
 
 		def on_enter_name(self):
-			self.loop(self.match_name)
-			
-
-		def on_exit_name(self):
-			self.func_name = self.func_matches[0]
+			# print("enter name")
+			self.loop_class(self.match_name)
+			# print("test")
+			self.on_enter_spacer()
 
 		def on_enter_spacer(self):
-			self.loop("],{")
-									
+			# print("spacer")
+			self.loop_str(str("],{"))
+			self.on_enter_args()
 
 		def on_enter_args(self):
-			self.loop(self.match_args)
+			# print("enter args", flush=True)
+			self.loop_class(self.match_args)
+			# print("test")
+			return
 
-		def on_exit_args(self):
-			pass
 
 	def get_answer(self):
+		machine = self._CheckerMachine(self._prep_prompt(), self._funcdefs, self._get_token)
+		machine.on_enter_name()
+		# print("finished")
+		self.answer: dict = {}
+		self.answer["prompt"] = self.prompt
+		self.answer["name"] = machine.func.name
+		self.answer["parameters"] = {}
+		for arg in machine.params:
+			try:
+				self.answer["parameters"][arg[0]] = float(arg[1])
+			except ValueError:
+				self.answer["parameters"][arg[0]] = arg[1]
+		return
 
-		self.args: dict[str | float] = {}
-		for pair in matched:
-			self.args[pair[0]] = pair[1].strip("'")
+		
 		
 
 	def _prep_prompt(self) -> str:
@@ -177,10 +219,6 @@ class	FeedbackLoop():
 			f"Answer: ["
 		)
 		return text
-
-
-	def _choose_token(self, text: str) -> str:
-		pass
 
 
 	def _get_token(self, text: str, top_k: int = 10) -> list[list[str | float]]:
@@ -243,7 +281,7 @@ if __name__ == "__main__":
 	start = time.time()
 	for i in range(100):
 		MSG += newloop.get_token(MSG, 1)
-	print(MSG)
+	# print(MSG)
 	end = time.time()
-	print(f"Time: {end-start}")
+	# print(f"Time: {end-start}")
 
