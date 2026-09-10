@@ -21,10 +21,19 @@ if __name__ == "__main__":
 		prompts.append(prompt["prompt"])
 
 	loops: list[FeedbackLoop] = []
+	out: list[dict] = []
 
 	FeedbackLoop(None, funcdefs=funcs)
 	for prompt in prompts:
 		curr_loop  = FeedbackLoop(prompt)
 		loops.append(curr_loop)
 		curr_loop.get_answer()
-		print(f"{curr_loop.prompt}\n{curr_loop.func_name}\n{curr_loop.args}\n")
+		print(f"{curr_loop.answer["prompt"]}\n{curr_loop.answer["name"]}\n{curr_loop.answer["parameters"]}\n")
+		out.append(curr_loop.answer)
+		# sys.exit()
+	
+	# print(out)
+	with open("out.json", 'w') as file:
+		json.dump(out, file, indent=2)
+
+
