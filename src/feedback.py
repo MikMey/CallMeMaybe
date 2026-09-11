@@ -129,12 +129,13 @@ class FeedbackLoop():
                            (np.max(scores) - np.min(scores)) * 100)
             scores = norm_scores
 
-        print("\033[H", end="")
-        print("\033[2J", end="")  # erase everything from here downward
-        # os.system('cls' if os.name == 'nt' else 'clear')
-        for i, score in enumerate(scores):
-            print(f"Token: {(repr(tokens[i])[1:-1]):<15}: {score.round(3)}")
-        # print(f"\033[{len(scores)}A", end="")
+        if FeedbackLoop._verbose:
+            print("\033[H", end="")
+            print("\033[2J", end="")  # erase everything from here downward
+            # os.system('cls' if os.name == 'nt' else 'clear')
+            for i, score in enumerate(scores):
+                print(f"Token: {(repr(tokens[i])[1:-1]):<15}: {score.round(3)}")
+            # print(f"\033[{len(scores)}A", end="")
 
         # for i in range(top_k):
         #     print(f"{tokens[i]!r}\t{round(float(scores[i]), 3)}%")
