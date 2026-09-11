@@ -1,6 +1,4 @@
-# CallMeMaybe: Function Calling with Constrained Decoding
-
-*This project has been created as part of the 42 curriculum by mikmey.*
+*This project has been created as part of the 42 curriculum by mimeyer.*
 
 ## Description
 
