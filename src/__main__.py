@@ -1,29 +1,12 @@
 import sys
-import json
+from typing import Any
 
 from pydantic import ValidationError
 
-from . import parse_args, FuncDef, FeedbackLoop
+from . import parse_args, FuncDef, FeedbackLoop, file_parse, create_out
 
-if __name__ == "__main__":
-    args = parse_args()
-    try:
-        with open(args.functions_definition, "r") as file:
-            func_def = json.load(file)
-            if not func_def:
-                sys.exit("Function definitions are empty")
-        with open(args.input, "r") as file:
-            raw_prompts = json.load(file)
-            if not raw_prompts:
-                sys.exit("Prompts are empty")
-    except json.decoder.JSONDecodeError as err:
-        sys.exit(f"Invalid json file:\n{err}")
-    except (PermissionError, OSError, FileNotFoundError,
-            IsADirectoryError) as err:
-        sys.exit(f"Provided file path is incorrect:\n{err}")
-    except Exception as err:
-        sys.exit(f"Error:\n{err}")
 
+def check_model(func_def: Any) -> list[FuncDef]:
     funcs: list[FuncDef] = []
     try:
         for func in func_def:
@@ -38,6 +21,13 @@ if __name__ == "__main__":
         sys.exit(f"Malformated file or argument:\n{err}")
     except Exception as err:
         sys.exit(f"Error:\n{err}")
+    return funcs
+
+
+def main() -> None:
+    args = parse_args()
+    func_def, raw_prompts = file_parse(args)
+    funcs = check_model(func_def)
 
     prompts = []
     for prompt in raw_prompts:
@@ -59,9 +49,8 @@ if __name__ == "__main__":
         out.append(curr_loop.answer)
         # sys.exit()
 
-    # print(out)
-    try:
-        with open(args.output, 'w') as file:
-            json.dump(out, file, indent=2)
-    except Exception as err:
-        sys.exit(f"cannot write to output file:\n{err}")
+        create_out(args, out)
+
+
+if __name__ == "__main__":
+    main()

@@ -46,126 +46,6 @@ class FeedbackLoop():
                 FeedbackLoop._dec_vocab[value] = key
             FeedbackLoop._funcdefs = funcdefs
 
-    class _CheckerMachine():
-
-        def __init__(self, prompt: str, funcdefs: list[FuncDef] | Any,
-                     get_token: Callable):
-            self.prompt = prompt
-            self.funcdefs = funcdefs
-            self.get_token = get_token
-            self.func: FuncDef | Any = None
-            self.params: list[tuple[str]] = []
-
-        def loop_class(self, func: Callable) -> None:
-            # print("class loop")
-            top_k = 10
-            res = ""
-            while True:
-                # print(f"res: {res}")
-                options = self.get_token(self.prompt + res, top_k)
-                # print(f"prompt: {self.prompt}\noptions: {options[0]}")
-                for option in options[0]:
-                    to_check: str = res + option
-                    matches: list = func(to_check)
-                    if len(matches) > 1:
-                        res = to_check
-                        break
-
-                if len(matches) == 1:
-                    top_k += 5
-                    continue
-                if len(matches) == 2 and matches[-1] is True:
-                    # print("exit loop class")
-                    self.prompt += res
-                    return
-                top_k = 10
-
-        def loop_str(self, var: str | Any) -> None:
-            """Match given argument to returned token."""
-            # print("str loop")
-            res = ""
-            top_k = 10
-            while True:
-                matches: bool = False
-                options = self.get_token(self.prompt + res, top_k)
-                # print(f"prompt: {self.prompt}\noptions: {options[0]}")
-                for option in options[0]:
-                    to_check: str = res + option
-                    if var.startswith(to_check) or to_check.startswith(var):
-                        matches = True
-                        res = to_check
-                        break
-
-                if not matches:
-                    top_k += 5
-                    continue
-                if to_check.startswith(var):
-                    self.prompt += res
-                    # print(f"prompt: {self.prompt}")
-                    # print(f"res: {res}")
-                    return
-                top_k = 10
-
-        def match_name(self, to_check: str) -> list[Any | bool]:
-            func_matches: list[FuncDef | Any] = [
-                func for func in self.funcdefs
-                if func.name.startswith(to_check)
-                or to_check.startswith(func.name)
-            ]
-            # if func_matches:
-            # 	for func in func_matches:
-            #         print (f"name: {func.name}")
-            func_matches.append(False)
-            if (len(func_matches) == 2 and
-                    to_check.startswith(func_matches[0].name)):
-                self.func = func_matches[0]
-                func_matches[-1] = True
-            return func_matches
-
-        def match_args(self, to_check: str | Any) -> list[Any | bool]:
-            matches: list[list | Any] = [[]]
-            to_check = to_check.split(",")
-            for val in to_check:
-                val = val.strip()
-                val = re.sub("'", "", val)
-            for arg, desc in self.func.params.items():
-                if (
-                        any(val.startswith(arg) for val in to_check) or
-                        any(arg.startswith(val) for val in to_check)
-                ):
-                    matches[0].append(arg)
-            matches.append(False)
-            matched: list[tuple[str]] = []
-            to_check = ",".join([thing for thing in to_check])
-            matched = (arg_pattern.findall(to_check))
-            # print(matched)
-            if (matched and len(matched) == len(self.func.params) and
-                    to_check.strip().endswith('}')):
-                # print(
-                #     f"len matched: {len(matched)};"
-                #     "len params: {len(self.func.params)}"
-                # )
-                matches[-1] = True
-                self.params = matched
-            return matches
-
-        def on_enter_name(self) -> None:
-            # print("enter name")
-            self.loop_class(self.match_name)
-            # print("test")
-            self.on_enter_spacer()
-
-        def on_enter_spacer(self) -> None:
-            # print("spacer")
-            self.loop_str(str("],{"))
-            self.on_enter_args()
-
-        def on_enter_args(self) -> None:
-            # print("enter args", flush=True)
-            self.loop_class(self.match_args)
-            # print("test")
-            return
-
     def get_answer(self) -> None:
         machine = self._CheckerMachine(self._prep_prompt(),
                                        self._funcdefs, self._get_token)
@@ -175,6 +55,7 @@ class FeedbackLoop():
         self.answer["prompt"] = self.prompt
         self.answer["name"] = machine.func.name
         self.answer["parameters"] = {}
+
         for i, arg in enumerate(machine.params):
             match_type = list(machine.func.params.values())[i]
             # print(f"match: {match_type}\narg: {arg}\ni: {i}")
@@ -271,3 +152,123 @@ class FeedbackLoop():
                 token.translate(str.maketrans({"Ġ": " ", "Ċ": "\n"}))  # type: ignore  # noqa: E501
             )
         return tokens
+
+    class _CheckerMachine():
+
+        def __init__(self, prompt: str, funcdefs: list[FuncDef] | Any,
+                     get_token: Callable):
+            self.prompt = prompt
+            self.funcdefs = funcdefs
+            self.get_token = get_token
+            self.func: FuncDef | Any = None
+            self.params: list[tuple[str]] = []
+
+        def on_enter_name(self) -> None:
+            # print("enter name")
+            self.loop_class(self.match_name)
+            # print("test")
+            self.on_enter_spacer()
+
+        def on_enter_spacer(self) -> None:
+            # print("spacer")
+            self.loop_str(str("],{"))
+            self.on_enter_args()
+
+        def on_enter_args(self) -> None:
+            # print("enter args", flush=True)
+            self.loop_class(self.match_args)
+            # print("test")
+            return
+
+        def loop_class(self, func: Callable) -> None:
+            # print("class loop")
+            top_k = 10
+            res = ""
+            while True:
+                # print(f"res: {res}")
+                options = self.get_token(self.prompt + res, top_k)
+                # print(f"prompt: {self.prompt}\noptions: {options[0]}")
+                for option in options[0]:
+                    to_check: str = res + option
+                    matches: list = func(to_check)
+                    if len(matches) > 1:
+                        res = to_check
+                        break
+
+                if len(matches) == 1:
+                    top_k += 5
+                    continue
+                if len(matches) == 2 and matches[-1] is True:
+                    # print("exit loop class")
+                    self.prompt += res
+                    return
+                top_k = 10
+
+        def loop_str(self, var: str | Any) -> None:
+            """Match given argument to returned token."""
+            # print("str loop")
+            res = ""
+            top_k = 10
+            while True:
+                matches: bool = False
+                options = self.get_token(self.prompt + res, top_k)
+                # print(f"prompt: {self.prompt}\noptions: {options[0]}")
+                for option in options[0]:
+                    to_check: str = res + option
+                    if var.startswith(to_check) or to_check.startswith(var):
+                        matches = True
+                        res = to_check
+                        break
+
+                if not matches:
+                    top_k += 5
+                    continue
+                if to_check.startswith(var):
+                    self.prompt += res
+                    # print(f"prompt: {self.prompt}")
+                    # print(f"res: {res}")
+                    return
+                top_k = 10
+
+        def match_name(self, to_check: str) -> list[Any | bool]:
+            func_matches: list[FuncDef | Any] = [
+                func for func in self.funcdefs
+                if func.name.startswith(to_check)
+                or to_check.startswith(func.name)
+            ]
+            # if func_matches:
+            # 	for func in func_matches:
+            #         print (f"name: {func.name}")
+            func_matches.append(False)
+            if (len(func_matches) == 2 and
+                    to_check.startswith(func_matches[0].name)):
+                self.func = func_matches[0]
+                func_matches[-1] = True
+            return func_matches
+
+        def match_args(self, to_check: str | Any) -> list[Any | bool]:
+            matches: list[list | Any] = [[]]
+            to_check = to_check.split(",")
+            for val in to_check:
+                val = val.strip()
+                val = re.sub("'", "", val)
+            for arg, desc in self.func.params.items():
+                if (
+                        any(val.startswith(arg) for val in to_check) or
+                        any(arg.startswith(val) for val in to_check)
+                ):
+                    matches[0].append(arg)
+            matches.append(False)
+            matched: list[tuple[str]] = []
+            to_check = ",".join([thing for thing in to_check])
+            matched = (arg_pattern.findall(to_check))
+            # print(matched)
+            if (matched and len(matched) == len(self.func.params) and
+                    to_check.strip().endswith('}')):
+                # print(
+                #     f"len matched: {len(matched)};"
+                #     "len params: {len(self.func.params)}"
+                # )
+                matches[-1] = True
+                self.params = matched
+            return matches
