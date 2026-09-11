@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import sys
 import json
 from typing import Any
+from pathlib import Path
 
 import argparse
 
@@ -51,6 +52,8 @@ def file_parse(args: Args) -> list[Any]:
 
 def create_out(args: Args, out: list[dict]) -> None:
     # print(out)
+    direc = Path("data/output")
+    direc.mkdir(parents=True, exist_ok=True)
     try:
         with open(args.output, 'w') as file:
             json.dump(out, file, indent=2)
