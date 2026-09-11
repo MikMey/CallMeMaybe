@@ -21,8 +21,8 @@ run:
 	uv run $(PYTHON) -m $(NAME) $(FLAGS)
 
 lint:
-	$(FLAKE8) $(FLAKE8_FLAGS) .
-	$(MYPY) . $(MYPY_FLAGS)
+	$(FLAKE8) $(FLAKE8_FLAGS) ./src/*
+	$(MYPY) ./src/*.py $(MYPY_FLAGS)
 
 clean:
 	rm -rf .mypy_cache .pytest_cache
