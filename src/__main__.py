@@ -36,20 +36,28 @@ def main() -> None:
     loops: list[FeedbackLoop] = []
     out: list[dict] = []
 
-    FeedbackLoop(funcdefs=funcs)
-    for prompt in prompts:
-        curr_loop = FeedbackLoop(prompt)
-        loops.append(curr_loop)
-        curr_loop.get_answer()
-        print(
-            f"{curr_loop.answer["prompt"]}\n"
-            f"{curr_loop.answer["name"]}\n"
-            f"{curr_loop.answer["parameters"]}\n"
-        )
-        out.append(curr_loop.answer)
-        # sys.exit()
+    # print("\033[s", end="")
 
-        create_out(args, out)
+    FeedbackLoop(funcdefs=funcs, verbose=True)
+    for prompt in prompts:
+        try:
+            curr_loop = FeedbackLoop(prompt)
+            loops.append(curr_loop)
+            curr_loop.get_answer()
+            # print(
+            #     f"{curr_loop.answer["prompt"]}\n"
+            #     f"{curr_loop.answer["name"]}\n"
+            #     f"{curr_loop.answer["parameters"]}\n"
+            # )
+            out.append(curr_loop.answer)
+            # sys.exit()
+        except TimeoutError:
+            print(
+                "Iteration taking too long, "
+                "continuing with next prompt", file=sys.stderr
+                )
+
+    create_out(args, out)
 
 
 if __name__ == "__main__":
