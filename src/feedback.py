@@ -20,7 +20,7 @@ post_name_pattern = re.compile(
 )
 
 arg_pattern = re.compile(
-    r"(?P<arg>\w+)'?:\s?'?(?P<val>[^},]+)"
+    r"(?P<arg>[^:,]+)'?:\s?'?(?P<val>[^},]+)"
 )
 
 
@@ -29,14 +29,17 @@ class FeedbackLoop():
     _vocab: dict[str, int] = {}
     _dec_vocab: list[str] = []
     _funcdefs: list[FuncDef] | Any = []
+    _verbose: Any = False
 
     def __init__(self, prompt: Any = None,
                  funcdefs: Optional[list[FuncDef]] = None,
-                 model: Optional[str] = "Qwen/Qwen3-0.6B"):
+                 model: Optional[str] = "Qwen/Qwen3-0.6B",
+                 verbose: Optional[bool] = False):
         self.prompt = prompt
         self.func_name: dict[str, str] = {}
         self.args: dict[str, dict[str, Any]] = {}
         if FeedbackLoop._model is None:
+            FeedbackLoop._verbose = verbose
             FeedbackLoop._model = Small_LLM_Model(model_name=model)
             vocab_file = FeedbackLoop._model.get_path_to_vocab_file()
             with open(vocab_file, 'r') as file:
@@ -60,22 +63,25 @@ class FeedbackLoop():
             match_type = list(machine.func.params.values())[i]
             # print(f"match: {match_type}\narg: {arg}\ni: {i}")
             try:
+                key = arg[0]
+                key = key.translate(str.maketrans({"'": "", '"': "", " ": ""}))  # type: ignore  # noqa: E501
                 match match_type:
                     case "float":
-                        self.answer["parameters"][arg[0]] = float(arg[1])  # type: ignore  # noqa: E501
+                        self.answer["parameters"][key] = float(arg[1])  # type: ignore  # noqa: E501
                     case "str":
                         val = arg[1]  # type: ignore
                         if (arg[1].count("'") % 2):  # type: ignore
                             val = arg[1].strip("'")  # type: ignore
-                        self.answer["parameters"][arg[0]] = val
+                        val = val.strip('"')
+                        self.answer["parameters"][key] = val
                     case "int":
-                        self.answer["parameters"][arg[0]] = int(arg[1])  # type: ignore  # noqa: E501
+                        self.answer["parameters"][key] = int(arg[1])  # type: ignore  # noqa: E501
                     case "bool":
-                        self.answer["parameters"][arg[0]] = bool(arg[1])  # type: ignore  # noqa: E501
+                        self.answer["parameters"][key] = bool(arg[1])  # type: ignore  # noqa: E501
                     case "list":
-                        self.answer["parameters"][arg[0]] = list(arg[1])  # type: ignore  # noqa: E501
+                        self.answer["parameters"][key] = list(arg[1])  # type: ignore  # noqa: E501
                     case "dict":
-                        self.answer["parameters"][arg[0]] = dict(arg[1])  # type: ignore  # noqa: E501
+                        self.answer["parameters"][key] = dict(arg[1])  # type: ignore  # noqa: E501
             except (ValueError, KeyError) as err:
                 msg = f"Expected and generated types don't match:\n{err}"
                 sys.exit(msg)
@@ -122,6 +128,13 @@ class FeedbackLoop():
             norm_scores = ((scores - np.min(scores)) /
                            (np.max(scores) - np.min(scores)) * 100)
             scores = norm_scores
+
+        print("\033[H", end="")
+        print("\033[2J", end="")  # erase everything from here downward
+        # os.system('cls' if os.name == 'nt' else 'clear')
+        for i, score in enumerate(scores):
+            print(f"Token: {(repr(tokens[i])[1:-1]):<15}: {score.round(3)}")
+        # print(f"\033[{len(scores)}A", end="")
 
         # for i in range(top_k):
         #     print(f"{tokens[i]!r}\t{round(float(scores[i]), 3)}%")
@@ -184,7 +197,12 @@ class FeedbackLoop():
             # print("class loop")
             top_k = 10
             res = ""
+            turns = 0
             while True:
+                if top_k >= 100 or turns >= 100:
+                    raise TimeoutError
+                turns += 1
+                # print(res)
                 # print(f"res: {res}")
                 options = self.get_token(self.prompt + res, top_k)
                 # print(f"prompt: {self.prompt}\noptions: {options[0]}")
@@ -192,6 +210,7 @@ class FeedbackLoop():
                     to_check: str = res + option
                     matches: list = func(to_check)
                     if len(matches) > 1:
+                        # print (len(matches))
                         res = to_check
                         break
 
@@ -210,6 +229,8 @@ class FeedbackLoop():
             res = ""
             top_k = 10
             while True:
+                if top_k >= 100:
+                    raise TimeoutError
                 matches: bool = False
                 options = self.get_token(self.prompt + res, top_k)
                 # print(f"prompt: {self.prompt}\noptions: {options[0]}")
@@ -250,25 +271,31 @@ class FeedbackLoop():
             matches: list[list | Any] = [[]]
             to_check = to_check.split(",")
             for val in to_check:
-                val = val.strip()
                 val = re.sub("'", "", val)
+                val = val.strip().strip('\n')
             for arg, desc in self.func.params.items():
+                # print(arg)
+                # print (to_check)
                 if (
                         any(val.startswith(arg) for val in to_check) or
                         any(arg.startswith(val) for val in to_check)
                 ):
+                    # print("success")
                     matches[0].append(arg)
             matches.append(False)
             matched: list[tuple[str]] = []
             to_check = ",".join([thing for thing in to_check])
+            # print(to_check)
             matched = (arg_pattern.findall(to_check))
             # print(matched)
+            # print(matched)
             if (matched and len(matched) == len(self.func.params) and
-                    to_check.strip().endswith('}')):
-                # print(
-                #     f"len matched: {len(matched)};"
-                #     "len params: {len(self.func.params)}"
-                # )
+                    '}' in to_check.strip().strip("\n")):
+                # print(matched)
                 matches[-1] = True
                 self.params = matched
+            # print(matches)
+            if matches[0] == []:
+                # print("pop")
+                matches.pop(0)
             return matches
